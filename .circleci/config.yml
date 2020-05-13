@@ -1,57 +1,77 @@
+# Javascript Node CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/ for more details
 version: 2
-jobs:
-  build:
+
+references:
+  working_directory: /tmp/gh-pages
+
+  load_image: &load_image
     docker:
-      - image: martinthomson/i-d-template:latest
-    working_directory: ~/draft
+      - image: python:3.7
 
+  env_vars_test: &env_vars_test
+    environment:
+      - CIRCLECI: "production"
+
+  env_vars_prod: &env_vars_prod
+    environment:
+      - CIRCLECI: "production"
+
+  install_dependencies: &install_dependencies
+    run:
+      name: install-dependencies
+      command: |
+        make all
+
+  setup_ssh_gh_pages: &setup_ssh_gh_pages
+    add_ssh_keys:
+      fingerprints:
+        # gh-pages deployment key from circle-ci config
+        - 2f:3c:9a:b5:80:16:1f:a2:b9:3f:1c:38:2b:a8:60:9e
+
+  # commit changes to gh-pages
+  # [ci skip] has been added to avoid loops with CircleCI triggers
+  publish_changes_gh_pages: &publish_changes_gh_pages
+    run:
+      name: publish_changes_gh_pages
+      command: |
+        make gh-pages
+
+jobs:
+  test:
+    <<: *load_image
+    <<: *env_vars_test
     steps:
-      - add_ssh_keys:
-          fingerprints:
-            - "df:c7:d8:6e:2f:0c:56:ac:62:be:e6:9f:e2:b9:7d:f4"
-
       - checkout
+      - << : *install_dependencies
 
-      # Build txt and html versions of drafts
-      - run:
-          name: "Build Drafts"
-          command: "make 'CLONE_ARGS=--reference ~/git-reference'"
-
-      # Update editor's copy on gh-pages
-      - run:
-          name: "Update GitHub Pages"
-          command: |
-            if [ "${CIRCLE_TAG#draft-}" == "${CIRCLE_TAG}" ]; then
-              make gh-pages
-            fi
-
-      # For tagged builds, upload to the datatracker.
-      - deploy:
-          name: "Upload to Datatracker"
-          command: |
-            if [ "${CIRCLE_TAG#draft-}" != "${CIRCLE_TAG}" ]; then
-              make upload
-            fi
-
-      # Save GitHub issues
-      - run:
-          name: "Save GitHub Issues"
-          command: "make issues || make issues DISABLE_ISSUE_FETCH=true && make gh-issues"
-
-      # Create and store artifacts
-      - run:
-          name: "Create Artifacts"
-          command: "make artifacts CI_ARTIFACTS=/tmp/artifacts"
-
-      - store_artifacts:
-          path: /tmp/artifacts
-
+  build_and_deploy_gh_pages:
+    <<: *load_image
+    <<: *env_vars_prod
+    steps:
+      - checkout
+      - << : *install_dependencies
+      - << : *setup_ssh_gh_pages
+      - << : *publish_changes_gh_pages
 
 workflows:
   version: 2
-  build:
+  # For any branch other than master,
+  # run CI tests at each commit
+  on-commit-test:
     jobs:
-      - build:
+      - test:
           filters:
-            tags:
-              only: /.*?/
+            branches:
+              ignore:
+                - master
+  # For each commit on the master branch
+  # deploy to VMs and to gh-pages
+  on-commit-build-and-deploy:
+    jobs:
+      - build_and_deploy_gh_pages:
+          filters:
+            branches:
+              only:
+                - master
