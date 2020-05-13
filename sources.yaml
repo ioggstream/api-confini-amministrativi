@@ -6,4 +6,10 @@ sorgenti:
   url: http://www.istat.it/storage/cartografia/confini_amministrativi/non_generalizzati/Limiti01012020.zip
   anno: 2020
   label: "01012020"
-  directory: 2020-01-01
+  directory: 2020-01-01/non-generalizzata
+
+- nome: Confini amministrativi generalizzati (meno dettagliati)
+  url: http://www.istat.it/storage/cartografia/confini_amministrativi/generalizzati/Limiti01012020_g.zip
+  anno: 2020
+  label: "01012020_g"
+  directory: 2020-01-01/generalizzata
