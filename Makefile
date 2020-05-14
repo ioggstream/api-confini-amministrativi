@@ -20,7 +20,7 @@ process: setup
 
 gh-pages: process
 	git clone $(REPO_ORIGIN) $(TMPDIR) -b gh-pages
-	mv build/* $(TMPDIR)
+	rsync -vaR   build/./* $(TMPDIR)
 	git -C $(TMPDIR) add .
 	git -C $(TMPDIR) -c user.name="gh-pages bot" -c user.email="gh-bot@example.it" \
 		commit -m "Script updating gh-pages from $(shell git rev-parse --short HEAD). [ci skip]"
