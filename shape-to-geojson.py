@@ -12,6 +12,8 @@ import requests
 
 import shapefile
 
+from pyproj import Transformer
+
 
 @click.command()
 @click.option("--shape", help="Source file", prompt="Enter the source file")
@@ -25,6 +27,29 @@ def write_file_to_path(fpath, text):
     return Path(fpath).write_text(text)
 
 
+#
+# Important: put the trasformer in a global variable!
+#
+transformer = Transformer.from_crs("epsg:32632", "epsg:4326")
+transform_coordinates = transformer.transform
+
+
+def transform_geometry(geometry):
+    if geometry["type"].lower() == "polygon":
+        geometry["coordinates"] = [
+            [transform_coordinates(*p) for p in line]
+            for line in geometry["coordinates"]
+        ]
+        return geometry
+    if geometry["type"].lower() == "multipolygon":
+        geometry["coordinates"] = [
+            [[transform_coordinates(*p) for p in line] for line in polygon]
+            for polygon in geometry["coordinates"]
+        ]
+        return geometry
+    raise NotImplementedError(geometry["type"])
+
+
 def convert(fpath):
     reader = shapefile.Reader(fpath)
     fields = reader.fields[1:]
@@ -32,7 +57,7 @@ def convert(fpath):
     yield from [
         {
             "type": "Feature",
-            "geometry": sr.shape.__geo_interface__,
+            "geometry": transform_geometry(sr.shape.__geo_interface__),
             "properties": dict(zip(field_names, sr.record)),
         }
         for sr in reader.shapeRecords()
@@ -77,6 +102,24 @@ def generate_features(basedir=".", label="01012020"):
     for sfile in shapes:
         for feature in convert(sfile):
             yield feature
+            break
+
+
+import yaml
+
+
+def test_transform_coordinates():
+    fpath = "comune/010001.geojson"
+    feature = yaml.safe_load(Path(fpath).read_text())
+    geometry = feature["geometry"]
+    coordinates = geometry["coordinates"]
+    if geometry["type"].lower() == "polygon":
+        geometry["coordinates"] = [
+            [transform_coordinates(*p) for p in line] for line in coordinates
+        ]
+    else:
+        raise NotImplementedError
+    assert geometry["coordinates"][0][0] == (44.44871511679767, 8.669959531865064)
 
 
 @pytest.mark.parametrize("feature", generate_features(label="01012020"))

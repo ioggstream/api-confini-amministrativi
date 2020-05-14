@@ -14,10 +14,34 @@ import shapefile
 
 log = logging.basicConfig(level=logging.INFO)
 
+from pyproj import Transformer
+
+#
+# Important: create the transformer outside a function or it will slow down the performance.
+#
+transformer = Transformer.from_crs("epsg:32632", "epsg:4326")
+transform_coordinates = transformer.transform
+
 
 def write_file_to_path(fpath, text):
     Path(dirname(fpath)).mkdir(parents=True, exist_ok=True)
     return Path(fpath).write_text(text)
+
+
+def transform_geometry(geometry):
+    if geometry["type"].lower() == "polygon":
+        geometry["coordinates"] = [
+            [transform_coordinates(*p) for p in line]
+            for line in geometry["coordinates"]
+        ]
+        return geometry
+    if geometry["type"].lower() == "multipolygon":
+        geometry["coordinates"] = [
+            [[transform_coordinates(*p) for p in line] for line in polygon]
+            for polygon in geometry["coordinates"]
+        ]
+        return geometry
+    raise NotImplementedError(geometry["type"])
 
 
 def convert(fpath):
@@ -27,7 +51,7 @@ def convert(fpath):
     yield from [
         {
             "type": "Feature",
-            "geometry": sr.shape.__geo_interface__,
+            "geometry": transform_geometry(sr.shape.__geo_interface__),
             "properties": dict(zip(field_names, sr.record)),
         }
         for sr in reader.shapeRecords()
@@ -48,7 +72,7 @@ def process_source(source, docsdir=""):
     destdir = source["directory"]
     dpath = Path(filename)
     if not dpath.is_file():
-        #log.info("Uncompress zip file")
+        # log.info("Uncompress zip file")
         ret = requests.get(source["url"])
         dpath.write_bytes(ret.content)
 
